@@ -11,6 +11,9 @@ export class WalletEntity extends Base {
   @Column({ type: 'varchar', nullable: false })
   invoice_number: string;
 
+  @Column({ type: 'double', nullable: false })
+  amount: number;
+
   @Column({ nullable: true })
   userId: number;
 
