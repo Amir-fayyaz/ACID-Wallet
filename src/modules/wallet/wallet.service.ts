@@ -21,7 +21,9 @@ export class WalletService {
 
     const queryRunner = this.DataSource.createQueryRunner();
     await queryRunner.connect();
+
     try {
+      await queryRunner.startTransaction();
       const { amount, fullName, mobile } = data;
       const user = await this.UserService.createUser({ mobile, fullName });
 
