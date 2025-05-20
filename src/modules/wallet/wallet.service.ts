@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { WalletEntity } from './entities/wallet.entity';
 import { DataSource, Repository } from 'typeorm';
@@ -6,6 +10,8 @@ import { UserService } from '../user/user.service';
 import { DepositDto } from './dto/deposit.dto';
 import { UserEntity } from '../user/entities/user.entity';
 import { WalletType } from './enum/walletType.enum';
+import { Products } from 'src/common/data/product.data';
+import { WithDrawDto } from './dto/withdraw.dto';
 
 @Injectable()
 export class WalletService {
@@ -43,15 +49,64 @@ export class WalletService {
         type: WalletType.Deposit,
         invoice_number: `${Date.now()}-${userData.id}`,
       });
-      //Close transAction
+      //Commit transAction
       await queryRunner.commitTransaction();
       await queryRunner.release();
     } catch (error) {
       await queryRunner.rollbackTransaction();
       await queryRunner.release();
-      throw new BadRequestException();
+      throw new BadRequestException(error.message);
     }
 
-    return { message: 'Payment was successfully' };
+    return { message: 'Balance Charged successfully' };
+  }
+
+  public async withdraw(data: WithDrawDto) {
+    const { productId, userId } = data;
+    const product = Products.find((product) => product.id === productId);
+
+    if (!product) throw new NotFoundException('Product not found');
+
+    const queryRunner = this.DataSource.createQueryRunner();
+    await queryRunner.connect();
+
+    try {
+      await queryRunner.startTransaction();
+
+      const user = await queryRunner.manager.findOneBy(UserEntity, {
+        id: userId,
+      });
+      if (!user) throw new NotFoundException('User not found');
+
+      if (user.balance < product.price)
+        throw new BadRequestException('Not enough balance');
+
+      const newBalance = user.balance - product.price;
+
+      await queryRunner.manager.update(
+        UserEntity,
+        { id: userId },
+        { balance: newBalance },
+      );
+
+      await queryRunner.manager.insert(WalletEntity, {
+        amount: product.price,
+        userId,
+        invoice_number: `${Date.now()}-${userId}`,
+        type: WalletType.WithDraw,
+      });
+      //Commit transActions
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      //rollBack
+      console.log(1);
+      await queryRunner.rollbackTransaction();
+      throw new BadRequestException(error.message);
+    } finally {
+      await queryRunner.release();
+    }
+    return {
+      message: 'Payments was successfully',
+    };
   }
 }
